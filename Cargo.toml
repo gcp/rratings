@@ -1,0 +1,11 @@
+[package]
+name = "rratings"
+version = "0.1.0"
+authors = ["Gian-Carlo Pascutto <gcp@sjeng.org>"]
+
+[dependencies]
+zstd = "0.4"
+pgn-reader = "0.10"
+glicko2 = "0.3"
+glob = "0.2"
+chrono = "0.4"
