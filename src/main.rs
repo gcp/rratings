@@ -11,6 +11,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
 use std::str;
+use std::sync::Mutex;
 
 use chrono::{DateTime, TimeZone, Utc};
 use glob::glob;
@@ -144,7 +145,7 @@ fn process_game(pgn: &str, db: &mut RatingDB) {
     if update.is_some() {
         let update = update.unwrap();
         if update.useful() {
-            db.update(&update);
+            db.update(update);
         }
     }
     //println!("{:?}", update);
@@ -207,7 +208,8 @@ fn process_zstd_pgn(path: std::path::PathBuf, db: &mut RatingDB) -> io::Result<(
             counter += 1;
             if counter % 10000 == 0 {
                 pb.tick();
-                pb.set_message(&format!("{} games", counter));
+                let players = db.player_count();
+                pb.set_message(&format!("{} games, {} players", counter, players));
             }
         } else {
             pgn_buff.push_str(&line);
