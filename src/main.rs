@@ -4,6 +4,9 @@ extern crate indicatif;
 extern crate pgn_reader;
 extern crate zstd;
 
+mod glicko;
+mod playerdb;
+
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufReader};
@@ -14,6 +17,7 @@ use glob::glob;
 use indicatif::{ProgressBar, ProgressDrawTarget};
 use pgn_reader::Outcome::{self, Decisive, Draw};
 use pgn_reader::{Color, Reader, Skip, Visitor};
+use playerdb::{RatingDB, StatsDB};
 
 #[derive(Clone, Debug, PartialEq)]
 enum TimeControl {
@@ -26,7 +30,7 @@ enum TimeControl {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct ResultUpdate {
+pub struct ResultUpdate {
     white: String,
     black: String,
     result: Option<Outcome>,
@@ -132,11 +136,17 @@ impl<'pgn> Visitor<'pgn> for ResultUpdate {
     }
 }
 
-fn process_game(pgn: &str) {
+fn process_game(pgn: &str, db: &mut RatingDB) {
     let mut visitor = ResultUpdate::new();
     let mut reader = Reader::new(&mut visitor, pgn.as_bytes());
 
     let update = reader.read_game();
+    if update.is_some() {
+        let update = update.unwrap();
+        if update.useful() {
+            db.update(&update);
+        }
+    }
     //println!("{:?}", update);
 }
 
@@ -159,7 +169,7 @@ impl<'a, R: io::Read> io::Read for ProgressBarRead<'a, R> {
     }
 }
 
-fn process_zstd_pgn(path: std::path::PathBuf) -> io::Result<()> {
+fn process_zstd_pgn(path: std::path::PathBuf, db: &mut RatingDB) -> io::Result<()> {
     println!("Processing {}", path.display());
 
     let input_size = std::fs::metadata(&path)?.len();
@@ -190,7 +200,7 @@ fn process_zstd_pgn(path: std::path::PathBuf) -> io::Result<()> {
             empty += 1;
         }
         if empty == 2 {
-            process_game(&pgn_buff);
+            process_game(&pgn_buff, db);
             empty = 0;
             pgn_buff.clear();
 
@@ -217,8 +227,10 @@ fn main() -> io::Result<()> {
     let mut paths: Vec<_> = glob(&input_glob).unwrap().filter_map(Result::ok).collect();
     paths.sort();
 
+    let mut db = RatingDB::new();
+
     for path in paths {
-        process_zstd_pgn(path)?;
+        process_zstd_pgn(path, &mut db)?;
     }
 
     Ok(())
