@@ -1,5 +1,6 @@
 extern crate chrono;
 extern crate glob;
+extern crate indicatif;
 extern crate pgn_reader;
 extern crate zstd;
 
@@ -10,6 +11,7 @@ use std::str;
 
 use chrono::{DateTime, TimeZone, Utc};
 use glob::glob;
+use indicatif::{ProgressBar, ProgressDrawTarget};
 use pgn_reader::Outcome::{self, Decisive, Draw};
 use pgn_reader::{Color, Reader, Skip, Visitor};
 
@@ -49,8 +51,12 @@ impl ResultUpdate {
         }
     }
 
-    fn valid(self) -> bool {
+    fn valid(&self) -> bool {
         self.rated && self.speed != TimeControl::Garbage && self.result.is_some()
+    }
+
+    fn useful(&self) -> bool {
+        self.valid() && self.speed == TimeControl::Blitz
     }
 }
 
@@ -134,15 +140,46 @@ fn process_game(pgn: &str) {
     //println!("{:?}", update);
 }
 
+pub struct ProgressBarRead<'a, R> {
+    bar: &'a ProgressBar,
+    read: R,
+}
+
+impl<'a, R: io::Read> ProgressBarRead<'a, R> {
+    fn new(bar: &'a ProgressBar, read: R) -> ProgressBarRead<'a, R> {
+        ProgressBarRead { bar, read }
+    }
+}
+
+impl<'a, R: io::Read> io::Read for ProgressBarRead<'a, R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let inc = self.read.read(buf)?;
+        self.bar.inc(inc as u64);
+        Ok(inc)
+    }
+}
+
 fn process_zstd_pgn(path: std::path::PathBuf) -> io::Result<()> {
     println!("Processing {}", path.display());
 
+    let input_size = std::fs::metadata(&path)?.len();
+    let pb = ProgressBar::new(input_size);
+    pb.set_draw_target(ProgressDrawTarget::stderr());
+
     let input_file = File::open(path)?;
-    let decoder = zstd::Decoder::new(input_file)?;
+    let pbr = ProgressBarRead::new(&pb, input_file);
+    let decoder = zstd::Decoder::new(pbr)?;
+
+    pb.set_style(
+        indicatif::ProgressStyle::default_bar().template(
+            "[{elapsed_precise}] {spinner} {wide_bar} {bytes}/{total_bytes} {msg} [{eta}]",
+        ),
+    );
 
     let f = BufReader::new(decoder);
     let mut pgn_buff = String::from("");
     let mut empty = 0;
+    let mut counter: u64 = 0;
 
     for line in f.lines() {
         if line.is_err() {
@@ -153,12 +190,15 @@ fn process_zstd_pgn(path: std::path::PathBuf) -> io::Result<()> {
             empty += 1;
         }
         if empty == 2 {
-            // println!("==START==");
-            // println!("{}", pgn_buff);
-            // println!("==END==");
             process_game(&pgn_buff);
             empty = 0;
             pgn_buff.clear();
+
+            counter += 1;
+            if counter % 10000 == 0 {
+                pb.tick();
+                pb.set_message(&format!("{} games", counter));
+            }
         } else {
             pgn_buff.push_str(&line);
             pgn_buff.push_str("\n");
