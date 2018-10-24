@@ -3,54 +3,81 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
 use chrono::{DateTime, TimeZone, Utc};
-use pgn_reader::Color;
+use pgn_reader::{Color, Outcome};
 
 use super::ResultUpdate;
 use glicko::GlickoRating;
 
 #[derive(Clone, Debug)]
 pub struct Player {
-    name: String,
-    rating: GlickoRating,
-    mtime: DateTime<Utc>,
+    pub g1rating: GlickoRating,
+    pub mtime: DateTime<Utc>,
 }
 
 impl Player {
-    pub fn new(name: &str) -> Player {
+    pub fn new(mtime: &DateTime<Utc>) -> Player {
         Player {
-            name: name.to_string(),
-            rating: GlickoRating::new(),
-            mtime: Utc.timestamp(0, 0),
+            g1rating: GlickoRating::new(),
+            mtime: *mtime,
         }
+    }
+
+    pub fn update_with_result(
+        &mut self,
+        color: Color,
+        result: &Outcome,
+        result_time: &DateTime<Utc>,
+        opponent: &Player,
+    ) {
+        let old_time = self.mtime;
+
+        let score = match result {
+            Outcome::Draw => 0.5,
+            Outcome::Decisive { winner } => {
+                if *winner == color {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
+        };
+
+        self.g1rating
+            .update_with_result(score, &old_time, result_time, opponent);
+        self.mtime = *result_time;
     }
 }
 
 pub struct StatsDB {
-    glicko_guess: AtomicUsize,
-    glicko_predicted: AtomicUsize,
+    glicko_guess: u64,
+    glicko_predicted: u64,
+    glicko_mse_accum: f64,
+    glicko_mse_total: f64,
 }
 
 impl StatsDB {
     pub fn new() -> StatsDB {
         StatsDB {
-            glicko_guess: AtomicUsize::new(0),
-            glicko_predicted: AtomicUsize::new(0),
+            glicko_guess: 0,
+            glicko_predicted: 0,
+            glicko_mse_accum: 0.0,
+            glicko_mse_total: 0.0,
         }
     }
 }
 
-type MapType = HashMap<String, GlickoRating>;
+type MapType = HashMap<String, Player>;
 
 pub struct RatingDB {
     db: Mutex<MapType>,
-    stats: StatsDB,
+    stats: Mutex<StatsDB>,
 }
 
 impl RatingDB {
     pub fn new() -> RatingDB {
         RatingDB {
             db: Mutex::new(MapType::new()),
-            stats: StatsDB::new(),
+            stats: Mutex::new(StatsDB::new()),
         }
     }
 
@@ -64,21 +91,19 @@ impl RatingDB {
 
         let mut db = self.db.lock().unwrap();
 
-        let white_entry = match db.get(&update.white) {
-            Some(&entry) => entry,
-            None => GlickoRating::default(),
+        let mut white_entry = match db.get(&update.white) {
+            Some(entry) => entry.clone(),
+            None => Player::new(&res_time),
         };
-        let black_entry = match db.get(&update.black) {
-            Some(&entry) => entry,
-            None => GlickoRating::default(),
+        let mut black_entry = match db.get(&update.black) {
+            Some(entry) => entry.clone(),
+            None => Player::new(&res_time),
         };
 
-        let new_white =
-            white_entry.update_with_result(Color::White, &result, &res_time, black_entry);
-        let new_black =
-            black_entry.update_with_result(Color::Black, &result, &res_time, white_entry);
+        white_entry.update_with_result(Color::White, &result, &res_time, &black_entry);
+        black_entry.update_with_result(Color::Black, &result, &res_time, &white_entry);
 
-        db.insert(update.white, new_white);
-        db.insert(update.black, new_black);
+        db.insert(update.white, white_entry);
+        db.insert(update.black, black_entry);
     }
 }
