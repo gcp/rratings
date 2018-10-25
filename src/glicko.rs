@@ -8,8 +8,8 @@ use playerdb::Player;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GlickoRating {
-    r: f32,
-    rd: f32,
+    pub r: f32,
+    pub rd: f32,
 }
 
 impl fmt::Display for GlickoRating {
@@ -43,6 +43,11 @@ impl GlickoRating {
         1.0 / (1.0 + p)
     }
 
+    fn calc_expect(rd1: f32, rd2: f32, r1: f32, r2: f32) -> f32 {
+        let rd = (rd1.powf(2.0) + rd2.powf(2.0)).sqrt();
+        GlickoRating::calc_e(rd, r1, r2)
+    }
+
     fn calc_g(rd: f32) -> f32 {
         let rdsq = rd.powf(2.0);
         let nom = 1.0 + ((3.0 * GlickoRating::Q.powf(2.0) * rdsq) / (consts::PI.powf(2.0)));
@@ -60,6 +65,21 @@ impl GlickoRating {
         let seconds = duration.num_seconds() as f64;
         let days = seconds / (24.0 * 60.0 * 60.0);
         days as f32
+    }
+
+    pub fn expect(
+        self,
+        old_time: &DateTime<Utc>,
+        result_time: &DateTime<Utc>,
+        opponent: &Player,
+    ) -> f32 {
+        let days_me = GlickoRating::calc_days(old_time, result_time);
+        let days_him = GlickoRating::calc_days(&opponent.mtime, result_time);
+
+        let pre_rd_me = self.calc_new_rd(days_me);
+        let pre_rd_his = opponent.g1rating.calc_new_rd(days_him);
+
+        GlickoRating::calc_expect(pre_rd_his, pre_rd_me, opponent.g1rating.r, self.r)
     }
 
     pub fn update_with_result(
@@ -87,7 +107,7 @@ impl GlickoRating {
         let new_rd = new_rd_sqr.sqrt();
 
         self.r = new_rating;
-        self.rd = new_rd;
+        self.rd = new_rd.min(30.0);
     }
 }
 

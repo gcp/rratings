@@ -40,6 +40,8 @@ pub struct ResultUpdate {
     datetime: DateTime<Utc>,
     rated: bool,
     speed: TimeControl,
+    white_rating: i32,
+    black_rating: i32,
 }
 
 impl ResultUpdate {
@@ -53,6 +55,8 @@ impl ResultUpdate {
             datetime: Utc.timestamp(0, 0),
             rated: false,
             speed: TimeControl::Garbage,
+            white_rating: 1500,
+            black_rating: 1500,
         }
     }
 
@@ -119,6 +123,10 @@ impl<'pgn> Visitor<'pgn> for ResultUpdate {
                 assert!(self.speed == TimeControl::Garbage);
                 // println!("{:?}", strvalue);
             }
+        } else if key == b"WhiteElo" {
+            self.white_rating = strvalue.parse::<i32>().unwrap();
+        } else if key == b"BlackElo" {
+            self.black_rating = strvalue.parse::<i32>().unwrap();
         }
     }
 
@@ -142,8 +150,7 @@ fn process_game(pgn: &str, db: &mut RatingDB) {
     let mut reader = Reader::new(&mut visitor, pgn.as_bytes());
 
     let update = reader.read_game();
-    if update.is_some() {
-        let update = update.unwrap();
+    if let Some(update) = update {
         if update.useful() {
             db.update(update);
         }
@@ -233,6 +240,8 @@ fn main() -> io::Result<()> {
 
     for path in paths {
         process_zstd_pgn(path, &mut db)?;
+        println!("{}", db.get_stats());
+        db.stats_reset();
     }
 
     Ok(())

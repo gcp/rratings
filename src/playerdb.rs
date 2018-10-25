@@ -28,6 +28,8 @@ impl Player {
         result: &Outcome,
         result_time: &DateTime<Utc>,
         opponent: &Player,
+        stats: Option<&Mutex<StatsDB>>,
+        update: Option<&ResultUpdate>,
     ) {
         let old_time = self.mtime;
 
@@ -42,6 +44,44 @@ impl Player {
             }
         };
 
+        // Record predictions
+        if let Some(stats) = stats {
+            let mut stats = stats.lock().unwrap();
+
+            // Glicko-1 updates
+            // let expected_score = self.g1rating.expect(&old_time, result_time, opponent);
+            let expected_score = if self.g1rating.r > opponent.g1rating.r {
+                1.0f32
+            } else if self.g1rating.r < opponent.g1rating.r {
+                0.0f32
+            } else {
+                0.5f32
+            };
+            stats.glicko_guess += 1;
+            if (score - expected_score).abs() < 0.5f32 {
+                stats.glicko_predicted += 1
+            }
+            stats.glicko_mse_total += 1.0;
+            stats.glicko_mse_accum += (score - expected_score).powf(2.0) as f64;
+
+            // Lichess' own rating updates
+            if let Some(update) = update {
+                assert!(color == Color::White);
+                let expected_score = if update.white_rating > update.black_rating {
+                    1.0f32
+                } else if update.white_rating < update.black_rating {
+                    0.0f32
+                } else {
+                    0.5f32
+                };
+                stats.lichess_guess += 1;
+                if (score - expected_score).abs() < 0.5f32 {
+                    stats.lichess_predicted += 1
+                }
+            }
+        }
+
+        // Update ratings
         self.g1rating
             .update_with_result(score, &old_time, result_time, opponent);
         self.mtime = *result_time;
@@ -49,10 +89,12 @@ impl Player {
 }
 
 pub struct StatsDB {
-    glicko_guess: u64,
-    glicko_predicted: u64,
-    glicko_mse_accum: f64,
-    glicko_mse_total: f64,
+    pub glicko_guess: u64,
+    pub glicko_predicted: u64,
+    pub glicko_mse_accum: f64,
+    pub glicko_mse_total: f64,
+    pub lichess_guess: u64,
+    pub lichess_predicted: u64,
 }
 
 impl StatsDB {
@@ -62,6 +104,8 @@ impl StatsDB {
             glicko_predicted: 0,
             glicko_mse_accum: 0.0,
             glicko_mse_total: 0.0,
+            lichess_guess: 0,
+            lichess_predicted: 0,
         }
     }
 }
@@ -100,10 +144,36 @@ impl RatingDB {
             None => Player::new(&res_time),
         };
 
-        white_entry.update_with_result(Color::White, &result, &res_time, &black_entry);
-        black_entry.update_with_result(Color::Black, &result, &res_time, &white_entry);
+        // Pass and update prediction stats for white only
+        white_entry.update_with_result(
+            Color::White,
+            &result,
+            &res_time,
+            &black_entry,
+            Some(&self.stats),
+            Some(&update),
+        );
+        black_entry.update_with_result(Color::Black, &result, &res_time, &white_entry, None, None);
 
         db.insert(update.white, white_entry);
         db.insert(update.black, black_entry);
+    }
+
+    pub fn get_stats(&self) -> String {
+        let stats = self.stats.lock().unwrap();
+
+        let pred_rate = 100.0 * stats.glicko_predicted as f64 / stats.glicko_guess as f64;
+        let mse = stats.glicko_mse_accum / stats.glicko_mse_total;
+
+        let lichess_pred_rate = 100.0 * stats.lichess_predicted as f64 / stats.lichess_guess as f64;
+
+        format!(
+            "{:.3}% p-rate, {:.4} MSE vs {:.3}% lichess p-rate",
+            pred_rate, mse, lichess_pred_rate
+        )
+    }
+
+    pub fn stats_reset(&mut self) {
+        self.stats = Mutex::new(StatsDB::new());
     }
 }
