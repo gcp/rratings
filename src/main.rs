@@ -2,9 +2,11 @@ extern crate chrono;
 extern crate glob;
 extern crate indicatif;
 extern crate pgn_reader;
+extern crate roots;
 extern crate zstd;
 
 mod glicko;
+mod glicko2;
 mod playerdb;
 
 use std::fs::File;
