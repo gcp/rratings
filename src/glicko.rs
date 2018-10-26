@@ -107,7 +107,7 @@ impl GlickoRating {
         let new_rd = new_rd_sqr.sqrt();
 
         self.r = new_rating;
-        self.rd = new_rd.min(30.0);
+        self.rd = new_rd.max(30.0);
     }
 }
 
