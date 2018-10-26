@@ -22,7 +22,7 @@ bunzip2 is rather slow to decompress and will limit the performance of the
 tool, especially if you're going to be running it multiple times. Alternatively,
 hack the source to support bzip2 directly.
 3) Change the paths in main() to point to your files.
-4) cargo run
+4) cargo run --release
 
 The tool assumes that sorting the files gets them in date order (again, true
 for the lichess dataset) and will process them one by one. Ratings are kept
