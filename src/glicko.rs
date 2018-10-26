@@ -19,6 +19,7 @@ impl fmt::Display for GlickoRating {
 }
 
 impl GlickoRating {
+    // Time for RD=50 to RD=350 in 5 years
     // 350 = sqrt(50^2 + c^2 * 1825)
     // 350^2 = 50^2 + c^2 * 1825
     // 350^2 - 50^2 = c^2 * 1825

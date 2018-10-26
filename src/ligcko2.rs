@@ -28,6 +28,7 @@ impl Ligcko2Rating {
     const RATING_PERIOD_DAYS: f32 = 4.665;
     const MAX_PHI: f32 = 350.0 / Ligcko2Rating::QF;
     const MIN_PHI: f32 = 60.0 / Ligcko2Rating::QF;
+    const MAX_VOLATILITY: f32 = 0.1;
 
     pub fn new() -> Ligcko2Rating {
         Ligcko2Rating {
@@ -147,7 +148,7 @@ impl Ligcko2Rating {
 
         self.mu = mu;
         self.phi = phi.max(Ligcko2Rating::MIN_PHI);
-        self.sigma = sigma;
+        self.sigma = sigma.min(Ligcko2Rating::MAX_VOLATILITY);
     }
 }
 
