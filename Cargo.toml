@@ -2,6 +2,9 @@
 name = "rratings"
 version = "0.1.0"
 authors = ["Gian-Carlo Pascutto <gcp@sjeng.org>"]
+license = "MIT"
+description = "Command line tool to recalculate (li)chess ratings"
+repository = "https://github.com/gcp/rratings"
 
 [dependencies]
 zstd = "0.4"
