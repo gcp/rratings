@@ -16,7 +16,7 @@ pub struct Glicko2Rating {
 
 impl fmt::Display for Glicko2Rating {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}±{}", self.r(), self.rd())
+        write!(f, "{}±{} σ={:.4}", self.r(), self.rd(), self.sigma)
     }
 }
 

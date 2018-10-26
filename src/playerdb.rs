@@ -204,10 +204,11 @@ impl RatingDB {
 
         let lichess_pred_rate = 100.0 * stats.lichess_predicted as f64 / stats.lichess_guess as f64;
 
-        format!(
-            "{:.3}% p-rate, {:.4} MSE vs {:.3}% p-rate, {:.4} MSE vs {:.3}% lichess p-rate",
-            pred_rate, mse, pred_rate_2, mse_2, lichess_pred_rate
-        )
+        let mut out = format!("{:.3}% G1 p-rate, {:.4} G1 MSE\n", pred_rate, mse);
+        out += &format!("{:.3}% G2 p-rate, {:.4} G2 MSE\n", pred_rate_2, mse_2);
+        out += &format!("{:.3}% lichess p-rate", lichess_pred_rate);
+
+        out
     }
 
     pub fn stats_reset(&mut self) {
