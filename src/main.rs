@@ -7,6 +7,7 @@ extern crate zstd;
 
 mod glicko;
 mod glicko2;
+mod ligcko2;
 mod playerdb;
 
 use std::fs::File;

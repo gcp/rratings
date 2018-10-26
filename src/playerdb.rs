@@ -8,11 +8,13 @@ use pgn_reader::{Color, Outcome};
 use super::ResultUpdate;
 use glicko::GlickoRating;
 use glicko2::Glicko2Rating;
+use ligcko2::Ligcko2Rating;
 
 #[derive(Clone, Debug)]
 pub struct Player {
     pub g1rating: GlickoRating,
     pub g2rating: Glicko2Rating,
+    pub l2rating: Ligcko2Rating,
     pub mtime: DateTime<Utc>,
 }
 
@@ -21,6 +23,7 @@ impl Player {
         Player {
             g1rating: GlickoRating::new(),
             g2rating: Glicko2Rating::new(),
+            l2rating: Ligcko2Rating::new(),
             mtime: *mtime,
         }
     }
@@ -89,6 +92,25 @@ impl Player {
             stats.glicko2_mse_total += 1.0;
             stats.glicko2_mse_accum += (score - expected_score).powf(2.0) as f64;
 
+            // Ligcko-2 updates
+            // Ternary expected, for compat with lichess ratings
+            let expected_score = if self.l2rating.mu > opponent.l2rating.mu {
+                1.0f32
+            } else if self.l2rating.mu < opponent.l2rating.mu {
+                0.0f32
+            } else {
+                0.5f32
+            };
+            stats.ligcko2_guess += 1;
+            if (score - expected_score).abs() < 0.5f32 {
+                stats.ligcko2_predicted += 1
+            }
+
+            // Smooth expected from Glicko formula
+            let expected_score = self.l2rating.expect(&old_time, result_time, opponent);
+            stats.ligcko2_mse_total += 1.0;
+            stats.ligcko2_mse_accum += (score - expected_score).powf(2.0) as f64;
+
             // Lichess' own rating updates
             if let Some(update) = update {
                 assert!(color == Color::White);
@@ -110,6 +132,8 @@ impl Player {
         self.g1rating
             .update_with_result(score, &old_time, result_time, opponent);
         self.g2rating.update_with_result(score, opponent);
+        self.l2rating
+            .update_with_result(score, &old_time, result_time, opponent);
         self.mtime = *result_time;
     }
 }
@@ -123,6 +147,10 @@ pub struct StatsDB {
     pub glicko2_predicted: u64,
     pub glicko2_mse_accum: f64,
     pub glicko2_mse_total: f64,
+    pub ligcko2_guess: u64,
+    pub ligcko2_predicted: u64,
+    pub ligcko2_mse_accum: f64,
+    pub ligcko2_mse_total: f64,
     pub lichess_guess: u64,
     pub lichess_predicted: u64,
 }
@@ -138,6 +166,10 @@ impl StatsDB {
             glicko2_predicted: 0,
             glicko2_mse_accum: 0.0,
             glicko2_mse_total: 0.0,
+            ligcko2_guess: 0,
+            ligcko2_predicted: 0,
+            ligcko2_mse_accum: 0.0,
+            ligcko2_mse_total: 0.0,
             lichess_guess: 0,
             lichess_predicted: 0,
         }
@@ -199,14 +231,18 @@ impl RatingDB {
         let pred_rate = 100.0 * stats.glicko_predicted as f64 / stats.glicko_guess as f64;
         let mse = stats.glicko_mse_accum / stats.glicko_mse_total;
 
-        let pred_rate_2 = 100.0 * stats.glicko2_predicted as f64 / stats.glicko2_guess as f64;
-        let mse_2 = stats.glicko2_mse_accum / stats.glicko2_mse_total;
+        let pred_rate_g2 = 100.0 * stats.glicko2_predicted as f64 / stats.glicko2_guess as f64;
+        let mse_g2 = stats.glicko2_mse_accum / stats.glicko2_mse_total;
+
+        let pred_rate_l2 = 100.0 * stats.ligcko2_predicted as f64 / stats.ligcko2_guess as f64;
+        let mse_l2 = stats.ligcko2_mse_accum / stats.ligcko2_mse_total;
 
         let lichess_pred_rate = 100.0 * stats.lichess_predicted as f64 / stats.lichess_guess as f64;
 
-        let mut out = format!("{:.3}% G1 p-rate, {:.4} G1 MSE\n", pred_rate, mse);
-        out += &format!("{:.3}% G2 p-rate, {:.4} G2 MSE\n", pred_rate_2, mse_2);
-        out += &format!("{:.3}% lichess p-rate", lichess_pred_rate);
+        let mut out = format!("{:.3}% G1 p-rate, {:.4} G1 MSE", pred_rate, mse);
+        out += &format!(", {:.3}% G2 p-rate, {:.4} G2 MSE", pred_rate_g2, mse_g2);
+        out += &format!(", {:.3}% L2 p-rate, {:.4} L2 MSE", pred_rate_l2, mse_l2);
+        out += &format!(", {:.3}% lichess p-rate ", lichess_pred_rate);
 
         out
     }
