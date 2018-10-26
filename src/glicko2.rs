@@ -21,7 +21,7 @@ impl fmt::Display for Glicko2Rating {
 }
 
 impl Glicko2Rating {
-    const TAU: f32 = 0.5;
+    const TAU: f32 = 0.75;
     const QF: f32 = 173.7178;
     const VOLATILITY: f32 = 0.06;
 

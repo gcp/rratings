@@ -231,7 +231,7 @@ fn process_zstd_pgn(path: std::path::PathBuf, db: &mut RatingDB) -> io::Result<(
 
 fn main() -> io::Result<()> {
     const BASEDIR: &str = "/srv/large/PGN/";
-    const BASEPREFIX: &str = "lichess_db_standard_rated_2018";
+    const BASEPREFIX: &str = "lichess_db_standard_rated_";
 
     let input_glob = String::from(BASEDIR) + BASEPREFIX + "*.zst";
 
