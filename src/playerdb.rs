@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
@@ -249,5 +251,22 @@ impl RatingDB {
 
     pub fn stats_reset(&mut self) {
         self.stats = Mutex::new(StatsDB::new());
+    }
+
+    pub fn dump_report(self, report_filename: &str) {
+        let mut db = self.db.lock().unwrap();
+        let mut sort_db: Vec<_> = db.drain().collect();
+        // Sort by lower confidence bound of Glicko-1 rating
+        sort_db.sort_by_key(|x| -((x.1.g1rating.r as i32) - 2 * (x.1.g1rating.rd as i32)));
+
+        let mut file = File::create(report_filename).unwrap();
+
+        for (key, val) in sort_db.iter() {
+            let player = format!(
+                "{},{},{},{}\n",
+                key, val.g1rating, val.g2rating, val.l2rating,
+            );
+            file.write_all(player.as_bytes()).unwrap();
+        }
     }
 }

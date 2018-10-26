@@ -14,7 +14,7 @@ pub struct GlickoRating {
 
 impl fmt::Display for GlickoRating {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}±{}", self.r, self.rd)
+        write!(f, "{:.1},{:.1}", self.r, self.rd)
     }
 }
 
